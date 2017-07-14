@@ -23,7 +23,7 @@ hd = " "
 hi = "!!"
 
 def print_meta(argv):
-	if len(argv.keys()) ! = META_LEN:
+	if len(argv.keys()) != META_LEN:
 		sys.stderr.write("Error: wrong meta args provided.\n")
 
 	source = argv[Meta.source]
@@ -67,7 +67,7 @@ blank_holder = "q"
 ed = ":"
 
 def update_srcip(header, srcip):
-	fields = header.split(hd)
+	fields = header.split(hd)[1:]
 	argv = {}
 	source = fields[Meta.source]
 	date = fields[Meta.date]
@@ -78,18 +78,27 @@ def update_srcip(header, srcip):
 	return hi + hd + str(source) + hd + str(date) + hd + str(time) + hd + str(monitor) + hd + str(extra) + hd + str(srcip)
 
 def construct_path(hop_array):
-	hop_str = ""
+	path_str = ""
 	for hop in hop_array:
-		if hop == "q":
-			hop_str += "q" + hpd
-		for tup in hop:
-			ip = tup[Tuple.ip]
-			rtt = tup[Tuple.rtt]
-			ttl = tup[Tuple.ttl]
-			tup_str = str(ip) + td + str(rtt) + td + str(ttl)
-		hop_str += tup_str + hpd
+		#first construct hop string
+		hop_str = ""
+		if hop != "q":
+			for tup in hop:
+				if (len(tup.keys()) == 0):
+					continue
+				ip = tup[Tuple.ip]
+				rtt = tup[Tuple.rtt]
+				ttl = tup[Tuple.ttl]
+				tup_str = str(ip) + itd + str(rtt) + itd + str(ttl)
+				hop_str += tup_str + td
+
+		else:
+			hop_str = "q"
 	
-	return hop_str.rstrip(hpd)
+		#append to the end of path string
+		path_str += hop_str.rstrip(td) + hpd
+
+	return path_str.rstrip(hpd)
 
 def construct_trace(argv):
 	dstip = argv[Trace.dstip]

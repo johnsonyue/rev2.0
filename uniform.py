@@ -1,3 +1,5 @@
+import sys
+
 import format
 
 ###################################################################
@@ -33,7 +35,7 @@ def transform_caida():
 			continue
 		if (header_line != ""): #update srcip to header
 			srcip = fields[1]
-			print format.update_srcip(header_line, src_ip)
+			print format.update_srcip(header_line, srcip)
 		
 		#construct four fields of each trace
 		dstip = fields[2]
@@ -49,14 +51,14 @@ def transform_caida():
 		rpl_ttl = fields[9]
 		halt_reason = fields[10]
 		halt_data = fields[11]
-		extra = str(halt_reason) + format.ed + str(halt_data)
+		extra = str(halt_reason) + format.ed + str(halt_data) + format.ed + rpl_ttl
 				
 		#construct trace
 		argv = {}
-		argv[format.dstip] = dstip
-		argv[format.timestamp] = timestamp
-		argv[format.path] = path
-		argv[format.extra] = extra
+		argv[format.Trace.dstip] = dstip
+		argv[format.Trace.timestamp] = timestamp
+		argv[format.Trace.path] = path
+		argv[format.Trace.extra] = extra
 		
 		print format.construct_trace(argv)
 
@@ -76,6 +78,9 @@ def construct_hop_array(path, replied, dstip, dst_rtt):
 		tmp = [ {} for i in range(MAX_PROBE_NUM) ]
 		tup_list = hop.split(';')
 		for tup in tup_list:
+			if tup == "q":
+				hop_array.append("q")
+				continue
 			item_list = tup.split(',')
 			ip = item_list[0]
 			rtt = item_list[1]
@@ -83,18 +88,33 @@ def construct_hop_array(path, replied, dstip, dst_rtt):
 
 			#different dimensions of tuple array
 			ntries = int(item_list[2])
-			tmp[ntries][format.ip] = ip
-			tmp[ntries][format.rtt] = rtt
-			tmp[ntries][format.ttl] = ttl
+			tmp[ntries-1][format.Tuple.ip] = ip
+			tmp[ntries-1][format.Tuple.rtt] = rtt
+			tmp[ntries-1][format.Tuple.ttl] = ttl
 		hop_array.append(tmp)
 	
 	tmp = [ {} for i in range(MAX_PROBE_NUM) ]
 	if (replied == 'R'):
 		ip = dstip
 		rtt = dst_rtt
-		tmp[1][format.ip] = ip #presume that targets always replies at first try.
-		tmp[1][format.rtt] = rtt
-		tmp[1][format.ttl] = ttl
+		tmp[1][format.Tuple.ip] = ip #presume that targets always replies at first try.
+		tmp[1][format.Tuple.rtt] = rtt
+		tmp[1][format.Tuple.ttl] = ttl
 		hop_array.append(tmp)
 	
 	return hop_array
+
+def usage():
+	print "uniform caida/iplane/ripeatlas"
+
+def main(argv):
+	if (len(argv) != 2):
+		usage()
+		exit()
+		
+	source = argv[1]
+	if source == "caida":
+		transform_caida()
+
+if __name__ == "__main__":
+	main(sys.argv)
