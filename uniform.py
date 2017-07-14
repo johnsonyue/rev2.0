@@ -75,7 +75,7 @@ def construct_hop_array(path, replied, dstip, dst_rtt):
 	MAX_PROBE_NUM = 2
 	for i in range(len(hop_list)):
 		hop = hop_list[i]
-		tmp = [ {} for i in range(MAX_PROBE_NUM) ]
+		tmp = [ {} for j in range(MAX_PROBE_NUM) ]
 		tup_list = hop.split(';')
 		for tup in tup_list:
 			if tup == "q":
