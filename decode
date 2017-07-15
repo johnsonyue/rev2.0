@@ -45,7 +45,7 @@ file_path=$1
 file_str=$( echo $file_path | sed 's/^.*\///g' )
 if [ "$META" == "True" ]; then
 	[ ! "${file_path}" == "/" ] && file_path=$pwd/$file_path
-	dir_str=$( echo $file_path | sed 's/[^\/]*//g' )
+	dir_str=$( echo $file_path | sed 's/[^\/]*$//g' )
 	python meta.py $TYPE $dir_str $file_str
 fi
 

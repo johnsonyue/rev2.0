@@ -14,7 +14,7 @@ import format
 # Note: this Routine processes only a single file.
 ###################################################################
 def transform_caida():
-	header_line=""
+	is_header_updated = False
 	while True:
 		try:
 			line = raw_input()
@@ -33,9 +33,10 @@ def transform_caida():
 		fields = line.strip('\n').split('\t', 13)
 		if (len(fields) < 14): #skip cases where there's no hop at all
 			continue
-		if (header_line != ""): #update srcip to header
+		if (not is_header_updated): #update srcip to header
 			srcip = fields[1]
 			print format.update_srcip(header_line, srcip)
+			is_header_updated = True
 		
 		#construct four fields of each trace
 		dstip = fields[2]
@@ -75,12 +76,12 @@ def construct_hop_array(path, replied, dstip, dst_rtt):
 	MAX_PROBE_NUM = 2
 	for i in range(len(hop_list)):
 		hop = hop_list[i]
+		if hop == "q":
+			hop_array.append("q")
+			continue
 		tmp = [ {} for j in range(MAX_PROBE_NUM) ]
 		tup_list = hop.split(';')
 		for tup in tup_list:
-			if tup == "q":
-				hop_array.append("q")
-				continue
 			item_list = tup.split(',')
 			ip = item_list[0]
 			rtt = item_list[1]
@@ -97,7 +98,7 @@ def construct_hop_array(path, replied, dstip, dst_rtt):
 	if (replied == 'R'):
 		ip = dstip
 		rtt = dst_rtt
-		tmp[1][format.Tuple.ip] = ip #presume that targets always replies at first try.
+		tmp[1][format.Tuple.ip] = ip #1: presume that targets always replies at first try.
 		tmp[1][format.Tuple.rtt] = rtt
 		tmp[1][format.Tuple.ttl] = ttl
 		hop_array.append(tmp)

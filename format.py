@@ -91,7 +91,6 @@ def construct_path(hop_array):
 				ttl = tup[Tuple.ttl]
 				tup_str = str(ip) + itd + str(rtt) + itd + str(ttl)
 				hop_str += tup_str + td
-
 		else:
 			hop_str = "q"
 	
