@@ -155,4 +155,10 @@ FileName = enum(
 #use "." as file name delimiter
 fnd = "."
 #use  " " as tuple item delimiter
-tid = " "
+tid = ", "
+
+def construct_edge_th():
+	return "#ingress, outgress, delay, connected, length, number, delay_info"
+
+def construct_node_th():
+	return "#ip, ntype"
