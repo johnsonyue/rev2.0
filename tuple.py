@@ -192,6 +192,8 @@ def output(node_dict, edge_dict, header_line):
 	global FULL_DELAY
 
 	global OVERWRITE_FILENAME
+	global OVERWRITE_DIRNAME
+	global IGNORE_META
 
 	#construct dir name
 	if OVERWRITE_DIRNAME != "":
