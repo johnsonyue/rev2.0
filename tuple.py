@@ -18,14 +18,15 @@ def enum(**enums):
 #         using tuple format.
 #
 # Options: -z compress output file
-#          -o <filename> overwrite default output file name"
+#          -o <filename> overwrite default output file name
 #          -d <dirname> specify output Directory
 #	      by default tuple uses $pwd
-#	   -u use Unsorted output"
+#	   -u use Unsorted output
 #          -b output both simpified and verbose file
 #          -n include edge number
 #          -l include length of indirect edge \
 #             (number of non-reply hops)
+#          -r ignore meta header
 #          -i include full delay info
 #          -a include all replied IPs in one hop (only use first reply by default)
 #
@@ -46,6 +47,7 @@ INCLUDE_ALL_REPLIES = False
 
 OVERWRITE_FILENAME = ""
 OVERWRITE_DIRNAME = ""
+IGNORE_META = False
 
 #model data structures
 class EdgeAttr():
@@ -194,7 +196,7 @@ def output(node_dict, edge_dict, header_line):
 	#construct dir name
 	if OVERWRITE_DIRNAME != "":
 		dir_name = OVERWRITE_DIRNAME + "/"
-	elif header_line != "":
+	elif header_line != "" and not IGNORE_META:
 		meta_list = header_line.split(format.hd)
 		date = meta_list[format.Meta.date]
 	
@@ -208,7 +210,7 @@ def output(node_dict, edge_dict, header_line):
 	#construct file name
 	if OVERWRITE_FILENAME != "":
 		file_name = OVERWRITE_FILENAME
-	elif header_line != "":
+	elif header_line != "" and not IGNORE_META:
 		meta_list = header_line.split(format.hd)
 		source = meta_list[format.Meta.source]
 		time = meta_list[format.Meta.time]
@@ -227,7 +229,7 @@ def output(node_dict, edge_dict, header_line):
 	fp = open( dir_name + "/" + node_file_name, 'wb' )
 	if GZIP_OUTPUT:
 		h = subprocess.Popen(['gzip', '-c', '-'], stdin=subprocess.PIPE, stdout=fp)
-		handle = h.stdout
+		handle = h.stdin
 	else:
 		handle = fp
 	
@@ -255,7 +257,7 @@ def output(node_dict, edge_dict, header_line):
 	fp = open( dir_name + "/" + edge_file_name, 'wb' )
 	if GZIP_OUTPUT:
 		h = subprocess.Popen(['gzip', '-c', '-'], stdin=subprocess.PIPE, stdout=fp)
-		handle = h.stdout
+		handle = h.stdin
 	else:
 		handle = fp
 	
@@ -302,6 +304,7 @@ def output(node_dict, edge_dict, header_line):
 		FULL_DELAY = True
 
 		OVERWRITE_FILENAME = file_name + ".backup"
+		OUTPUT_VERBOSE = False
 		output(node_dict, edge_dict, header_line)
 		
 
@@ -343,6 +346,7 @@ def usage():
 	print "-b output Both simplified and verbose file"
 	print "-n include edge Number"
 	print "-l include Length of indirect edge"
+	print "-r ignoRe meta header"
 	print "-i include full delay Info"
 	print "-a include All replied addresses in one hop (only use first reply by default)"
 
@@ -365,9 +369,10 @@ def main(argv):
 
 	global OVERWRITE_FILENAME
 	global OVERWRITE_DIRNAME
+	global IGNORE_META
 
 	try:
-		opts, args = getopt.getopt(argv[1:], "hgo:d:zubnlia")
+		opts, args = getopt.getopt(argv[1:], "hgo:d:zubnlria")
 	except getopt.GetoptError as err:
 		print str(err)
 		usage()
@@ -393,6 +398,8 @@ def main(argv):
 			INCLUDE_EDGE_NUMBER = True
 		elif o == "-l":
 			INCLUDE_INDIRECT_LENGTH = True
+		elif o == "-r":
+			IGNORE_META = True
 		elif o == "-i":
 			FULL_DELAY = True
 		elif o == "-a":
