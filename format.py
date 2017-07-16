@@ -106,3 +106,53 @@ def construct_trace(argv):
 	extra = argv[Trace.extra]
 	
 	return str(dstip) + fd + str(timestamp) + fd + str(path) + fd + str(extra)
+
+##############
+#tuple format#
+##############
+
+######################################################################################
+# Output Format:
+#         .edge: ingress, outgress, delay, \
+#                connected, [length[:length_n], number, max_delay:min_delay:avg_delay]
+#         .node: ip, ntype
+#
+######################################################################################
+#format data structures
+EdgeLine = enum(
+	ingress=0,
+	outgress=1,
+	delay=2,
+	connected=3,
+	length=4,
+	number=5,
+	delay_info=6
+)
+
+NodeLine = enum(
+	ip=0, #essentially, an IP is a 32 int.
+	ntype=1
+)
+
+ConnectionState = enum(
+	connected='D',
+	disconnected='I',
+	both='B'
+)
+
+NodeType = enum(
+	router='R',
+	host='H', #note 'host' is not necessarily a end host, might be a router
+	both='B'
+)
+
+FileName = enum(
+	source = 0,
+	time = 1,
+	monitor = 2
+)
+
+#use "." as file name delimiter
+fnd = "."
+#use  " " as tuple item delimiter
+tid = " "
