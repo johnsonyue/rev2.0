@@ -241,7 +241,8 @@ def output(node_dict, edge_dict, header_line):
 		node_key_list = node_dict.iterkeys()
 
 	handle.write( str(format.construct_node_th()) + "\n" )
-	handle.write( str(header_line) + "\n" )
+	if header_line != "":
+		handle.write( str(header_line) + "\n" )
 	for node_key in node_key_list:
 		ip_str = ip_int2str(node_key)
 		node = node_dict[node_key]
@@ -269,7 +270,8 @@ def output(node_dict, edge_dict, header_line):
 		edge_key_list = edge_dict.iterkeys()
 	
 	handle.write( str(format.construct_edge_th()) + "\n" )
-	handle.write( str(header_line) + "\n" )
+	if header_line != "":
+		handle.write( str(header_line) + "\n" )
 	for edge_key in edge_key_list:
 		in_ip_str = ip_int2str(edge_key[0])
 		out_ip_str = ip_int2str(edge_key[1])
