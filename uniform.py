@@ -15,6 +15,7 @@ import format
 ###################################################################
 def transform_caida():
 	is_header_updated = False
+	header_line = ""
 	while True:
 		try:
 			line = raw_input()
@@ -33,7 +34,7 @@ def transform_caida():
 		fields = line.strip('\n').split('\t', 13)
 		if (len(fields) < 14): #skip cases where there's no hop at all
 			continue
-		if (not is_header_updated): #update srcip to header
+		if (header_line != "" and not is_header_updated): #update srcip to header
 			srcip = fields[1]
 			print format.update_srcip(header_line, srcip)
 			is_header_updated = True
@@ -73,7 +74,7 @@ def construct_hop_array(path, replied, dstip, dst_rtt):
 	hop_list = path.split('\t')
 	
 	hop_array = []
-	MAX_PROBE_NUM = 2
+	MAX_PROBE_NUM = 3
 	for i in range(len(hop_list)):
 		hop = hop_list[i]
 		if hop == "q":

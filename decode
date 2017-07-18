@@ -38,8 +38,9 @@ done
 shift $((OPTIND-1))
 file_path=$1
 
-#type is mandatory
+#type and file_path is mandatory
 [ -z "$TYPE" ] && usage && exit
+[ -z "$file_path" ] && usage && exit
 
 #print meta if requested.
 file_str=$( echo $file_path | sed 's/^.*\///g' )
@@ -55,6 +56,10 @@ case $TYPE in
 		if [ ! -z "$( echo $file_str | grep "\.tar\.gz$" )" ]; then
 			[ ! -z "$( echo $file_str | grep "warts")" ] &&  tar zxvf $file_path -O | sc_analysis_dump && exit
 			tar zxvf $file_path -O && exit
+		elif [ ! -z "$( echo $file_str | grep "gz$" )" ]; then
+			[ ! -z "$( echo $file_str | grep "warts")" ] &&  gzip -cd $file_path | sc_analysis_dump && exit
+			gzip -cd $file_path && exit
+			
 		else
 			[ ! -z "$( echo $file_str | grep "warts")" ] && cat $file_path | sc_analysis_dump && exit
 			cat $file_path && exit

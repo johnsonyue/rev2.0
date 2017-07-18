@@ -1,4 +1,6 @@
 import sys
+import socket
+import struct
 
 def enum(**enums):
 	return type('Enum', (), enums)
@@ -7,12 +9,12 @@ def enum(**enums):
 #meta format.#
 ##############
 Meta = enum(
-	source = 0,
-	date = 1,
-	time = 2,
-	monitor = 3,
-	extra = 4,
-	srcip = 5
+	source = 1,
+	date = 2,
+	time = 3,
+	monitor = 4,
+	extra = 5,
+	srcip = 6
 )
 
 META_LEN = 6
@@ -67,7 +69,7 @@ blank_holder = "q"
 ed = ":"
 
 def update_srcip(header, srcip):
-	fields = header.split(hd)[1:]
+	fields = header.split(hd)
 	argv = {}
 	source = fields[Meta.source]
 	date = fields[Meta.date]
@@ -126,7 +128,8 @@ EdgeLine = enum(
 	connected=3,
 	length=4,
 	number=5,
-	delay_info=6
+	delay_info=6,
+	ttl_info=7
 )
 
 NodeLine = enum(
@@ -149,16 +152,60 @@ NodeType = enum(
 FileName = enum(
 	source = 0,
 	time = 1,
-	monitor = 2
+	monitor = 2,
+	ftype = 3
+)
+
+FileType = enum(
+	edge = "edge",
+	node = "node",
+	other = "others"
 )
 
 #use "." as file name delimiter
 fnd = "."
-#use  " " as tuple item delimiter
+#use  ", " as tuple item delimiter
 tid = ", "
+#use ", " as th delimiter
+thd = ", "
+#use ", " as th indicator
+thi = "#"
 
-def construct_edge_th():
-	return "#ingress, outgress, delay, connected, length, number, delay_info"
+def construct_edge_th( UNSORTED_OUTPUT, INCLUDE_EDGE_NUMBER, INCLUDE_INDIRECT_LENGTH, FULL_DELAY, INCLUDE_TTL ):
+	if (UNSORTED_OUTPUT):
+		th_str = thi + thi
+	else:
+		th_str = thi
+		
+	th_str += thd + "ingress" + thd + "outgress" + thd + "delay" + thd + "connected"
+	if (INCLUDE_EDGE_NUMBER):
+		th_str += thd + "length"
+	if (INCLUDE_INDIRECT_LENGTH):
+		th_str += thd + "number"
+	if (FULL_DELAY):
+		th_str += thd + "delay_info"
+	if (INCLUDE_TTL):
+		th_str += thd + "ttl_info"
+	
+	return th_str
 
-def construct_node_th():
-	return "#ip, ntype"
+def construct_node_th( UNSORTED_OUTPUT ):
+	if (UNSORTED_OUTPUT):
+		th_str = thi
+	else:
+		th_str = thi
+	
+	th_str += thd + "ip" + thd + "ntype"
+	
+	return th_str
+
+################
+#util routines.#
+################
+#ip string, ip int transformation utils
+def ip_str2int(ip):
+	packedIP = socket.inet_aton(ip)
+	return struct.unpack("!L", packedIP)[0]
+
+def ip_int2str(i):
+	return socket.inet_ntoa(struct.pack('!L',i)) 

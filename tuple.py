@@ -3,8 +3,6 @@ import os
 import math
 import subprocess
 import getopt
-import socket
-import struct
 
 import format
 
@@ -24,9 +22,11 @@ def enum(**enums):
 #	   -u use Unsorted output
 #          -b output both simpified and verbose file
 #          -n include edge number
+#          -m include monitor info
 #          -l include length of indirect edge \
 #             (number of non-reply hops)
 #          -r ignore meta header
+#          -s suppress Meta header
 #          -i include full delay info
 #          -a include all replied IPs in one hop (only use first reply by default)
 #
@@ -40,7 +40,9 @@ OUTPUT_VERBOSE = False
 UNSORTED_OUTPUT = False
 
 INCLUDE_EDGE_NUMBER = False
+INCLUDE_MONITOR = False
 INCLUDE_INDIRECT_LENGTH = False
+INCLUDE_TTL = False
 FULL_DELAY = False
 
 INCLUDE_ALL_REPLIES = False
@@ -48,12 +50,14 @@ INCLUDE_ALL_REPLIES = False
 OVERWRITE_FILENAME = ""
 OVERWRITE_DIRNAME = ""
 IGNORE_META = False
+SUPPRESS_META = False
 
 #model data structures
 class EdgeAttr():
 	MAX_DELAY = 1000000
 	def __init__(self):
 		self.delay = [0,0,self.MAX_DELAY,self.MAX_DELAY] #max,mean,min+,min
+		self.ttl = {}
 		self.connected = format.ConnectionState.connected
 		self.length = []
 		self.number = 0
@@ -62,17 +66,8 @@ class NodeAttr():
 	def _init__(self):
 		self.ntype = format.NodeType.router
 
-#routines
-#ip string, ip int transformation utils
-def ip_str2int(ip):
-	packedIP = socket.inet_aton(ip)
-	return struct.unpack("!L", packedIP)[0]
-
-def ip_int2str(i):
-	return socket.inet_ntoa(struct.pack('!L',i)) 
-
 ################################################################################################################
-# Main body of tuple:
+# Function parse_trace: (Main body of tuple)
 # Logic in Pseudo:
 #   1: combine blank hops
 #   2: eliminate initial blanks
@@ -113,12 +108,12 @@ def parse_trace(dstip, path, node_dict, edge_dict):
 			prev_ingress = ingress
 			continue
 		if (ingress_str.split(":")[0] == "q"):  #transform (*, outgress) into (prev_ingress, outgress)
-			in_ip_int = ip_str2int(prev_ingress.split(format.itd)[format.Tuple.ip])
+			in_ip_int = format.ip_str2int(prev_ingress.split(format.itd)[format.Tuple.ip])
 			length = int(ingress_str.split(":")[1])
 			ingress = prev_ingress
 			is_connected = False
 		else:                               #(ingress, outgress) mark as connected
-			in_ip_int = ip_str2int(ingress.split(format.itd)[format.Tuple.ip])
+			in_ip_int = format.ip_str2int(ingress.split(format.itd)[format.Tuple.ip])
 			is_connected = True
 		
 		outgress_list = outgress_str.split(format.td)
@@ -126,15 +121,18 @@ def parse_trace(dstip, path, node_dict, edge_dict):
 			outgress_list = outgress_list[:1]
 		
 		for outgress in outgress_list: 
-			out_ip_int = ip_str2int(outgress.split(format.itd)[format.Tuple.ip])
+			out_ip_int = format.ip_str2int(outgress.split(format.itd)[format.Tuple.ip])
 			edge_key = (in_ip_int, out_ip_int)
 			
 			in_rtt = ingress.split(format.itd)[format.Tuple.rtt]
 			out_rtt = outgress.split(format.itd)[format.Tuple.rtt]
 			delay = ( float(out_rtt) - float(in_rtt) ) / 2 #note it's "round" trip time.
+			
+			in_ttl = ingress.split(format.itd)[format.Tuple.ttl]
 			if (not edge_dict.has_key(edge_key)):
 				attr = EdgeAttr()
 				attr.delay = [delay, delay, attr.MAX_DELAY, delay] if delay <= 0 else [delay, delay, delay, delay]
+				attr.ttl[in_ttl] = 1
 				attr.connected = format.ConnectionState.connected if is_connected else format.ConnectionState.disconnected
 				attr.length = [] if is_connected else [length]
 				attr.number = 1
@@ -150,6 +148,12 @@ def parse_trace(dstip, path, node_dict, edge_dict):
 				if delay > 0 and delay < attr.delay[2]:
 					attr.delay[2] = delay
 				attr.delay[1] = float(attr.delay[1]*attr.number + delay)/(attr.number+1)
+				
+				#ttl
+				if attr.ttl.has_key(in_ttl):
+					attr.ttl[in_ttl] += 1
+				else:
+					attr.ttl[in_ttl] = 1
 				
 				#connected
 				if (attr.connected != is_connected):
@@ -169,7 +173,7 @@ def parse_trace(dstip, path, node_dict, edge_dict):
 		tup_list = hop.split(format.td)
 		for tup in tup_list:
 			ip_str = tup.split(format.itd)[format.Tuple.ip]
-			ip_int = ip_str2int(ip_str)
+			ip_int = format.ip_str2int(ip_str)
 			if (not node_dict.has_key(ip_int)):
 				attr = NodeAttr()
 				attr.ntype = format.NodeType.router
@@ -189,11 +193,13 @@ def output(node_dict, edge_dict, header_line):
 
 	global INCLUDE_EDGE_NUMBER
 	global INCLUDE_INDIRECT_LENGTH
+	global INCLUDE_TTL
 	global FULL_DELAY
 
 	global OVERWRITE_FILENAME
 	global OVERWRITE_DIRNAME
 	global IGNORE_META
+	global SUPPRESS_META
 
 	#construct dir name
 	if OVERWRITE_DIRNAME != "":
@@ -221,12 +227,16 @@ def output(node_dict, edge_dict, header_line):
 		file_name = str(source) + format.fnd + str(time) + format.fnd + str(monitor)
 	else:
 		file_name = "nosource" + format.fnd + "notime" + format.fnd + "nomonitor"
+	
+	#get monitor name
+	if INCLUDE_MONITOR:
+		monitor = header_line.split(format.hd)[format.Meta.monitor]
 
 	#start to write node
 	if GZIP_OUTPUT:
-		node_file_name = file_name + ".node.gz"
+		node_file_name = file_name + format.fnd + format.FileType.node + ".gz"
 	else:
-		node_file_name = file_name + ".node"
+		node_file_name = file_name + format.fnd + format.FileType.node
 
 	fp = open( dir_name + "/" + node_file_name, 'wb' )
 	if GZIP_OUTPUT:
@@ -240,11 +250,11 @@ def output(node_dict, edge_dict, header_line):
 	else:
 		node_key_list = node_dict.iterkeys()
 
-	handle.write( str(format.construct_node_th()) + "\n" )
-	if header_line != "":
+	handle.write( str(format.construct_node_th( UNSORTED_OUTPUT )) + "\n" )
+	if not SUPPRESS_META and header_line != "":
 		handle.write( str(header_line) + "\n" )
 	for node_key in node_key_list:
-		ip_str = ip_int2str(node_key)
+		ip_str = format.ip_int2str(node_key)
 		node = node_dict[node_key]
 		ntype = node.ntype
 		
@@ -253,9 +263,9 @@ def output(node_dict, edge_dict, header_line):
 	
 	#start to write edge
 	if GZIP_OUTPUT:
-		edge_file_name = file_name + ".edge.gz"
+		edge_file_name = file_name + format.fnd + format.FileType.edge + ".gz"
 	else:
-		edge_file_name = file_name + ".edge"
+		edge_file_name = file_name + format.fnd + format.FileType.edge
 
 	fp = open( dir_name + "/" + edge_file_name, 'wb' )
 	if GZIP_OUTPUT:
@@ -269,12 +279,12 @@ def output(node_dict, edge_dict, header_line):
 	else:
 		edge_key_list = edge_dict.iterkeys()
 	
-	handle.write( str(format.construct_edge_th()) + "\n" )
-	if header_line != "":
+	handle.write( str(format.construct_edge_th( UNSORTED_OUTPUT, INCLUDE_EDGE_NUMBER, INCLUDE_INDIRECT_LENGTH, FULL_DELAY, INCLUDE_TTL )) + "\n" )
+	if not SUPPRESS_META and header_line != "":
 		handle.write( str(header_line) + "\n" )
 	for edge_key in edge_key_list:
-		in_ip_str = ip_int2str(edge_key[0])
-		out_ip_str = ip_int2str(edge_key[1])
+		in_ip_str = format.ip_int2str(edge_key[0])
+		out_ip_str = format.ip_int2str(edge_key[1])
 		edge = edge_dict[edge_key]
 		delay = edge.delay[2]
 		if delay == edge.MAX_DELAY:
@@ -293,11 +303,19 @@ def output(node_dict, edge_dict, header_line):
 				length_str = length_str.rstrip(format.ed)
 				handle.write( format.tid + str(length_str) )
 		if INCLUDE_EDGE_NUMBER:
-			handle.write( format.tid + str(edge.number) )
+			handle.write( format.tid + str(monitor) + format.ed + str(edge.number) )
 		if FULL_DELAY:
 			min_positive = edge.delay[2] if edge.delay[2] != edge.MAX_DELAY else 0
 			delay_str = str(edge.delay[0]) + format.ed + str(edge.delay[1]) + format.ed + str(min_positive) + format.ed + str(edge.delay[3])
 			handle.write( format.tid + str(delay_str) )
+		
+		if INCLUDE_TTL:
+			ttl = edge.ttl
+			ttl_str = ""
+			for key in sorted( ttl.iterkeys() ):
+				ttl_str += str(key) + format.ed + str(ttl[key]) + format.ed
+			ttl_str = ttl_str.rstrip(format.ed)
+			handle.write( format.tid + str(monitor) + format.ed + str(ttl_str) )
 
 		handle.write("\n")
 	
@@ -305,12 +323,12 @@ def output(node_dict, edge_dict, header_line):
 	if OUTPUT_VERBOSE:
 		INCLUDE_EDGE_NUMBER = True
 		INCLUDE_INDIRECT_LENGTH = True
+		INCLUDE_TTL = True
 		FULL_DELAY = True
 
 		OVERWRITE_FILENAME = file_name + ".backup"
 		OUTPUT_VERBOSE = False
 		output(node_dict, edge_dict, header_line)
-		
 
 def build_graph():
 	#in memory data structure
@@ -349,8 +367,10 @@ def usage():
 	print "-u use Unsorted output"
 	print "-b output Both simplified and verbose file"
 	print "-n include edge Number"
+	print "-m include Monitor info"
 	print "-l include Length of indirect edge"
-	print "-r ignoRe meta header"
+	print "-r ignoRe meta header (concerned with output file name)"
+	print "-s Suppress Meta header (concerned with content in output file)"
 	print "-i include full delay Info"
 	print "-a include All replied addresses in one hop (only use first reply by default)"
 
@@ -366,7 +386,9 @@ def main(argv):
 	global UNSORTED_OUTPUT
 
 	global INCLUDE_EDGE_NUMBER
+	global INCLUDE_MONITOR
 	global INCLUDE_INDIRECT_LENGTH
+	global INCLUDE_TTL
 	global FULL_DELAY
 
 	global INCLUDE_ALL_REPLIES
@@ -374,9 +396,10 @@ def main(argv):
 	global OVERWRITE_FILENAME
 	global OVERWRITE_DIRNAME
 	global IGNORE_META
+	global SUPPRESS_META
 
 	try:
-		opts, args = getopt.getopt(argv[1:], "hgo:d:zubnlria")
+		opts, args = getopt.getopt(argv[1:], "hgo:d:zubnmltrsia")
 	except getopt.GetoptError as err:
 		print str(err)
 		usage()
@@ -400,14 +423,24 @@ def main(argv):
 			OUTPUT_VERBOSE = True
 		elif o == "-n":
 			INCLUDE_EDGE_NUMBER = True
+		elif o == "-m":
+			INCLUDE_MONITOR = True
 		elif o == "-l":
 			INCLUDE_INDIRECT_LENGTH = True
+		elif o == "-t":
+			INCLUDE_TTL = True
 		elif o == "-r":
 			IGNORE_META = True
+		elif o == "-s":
+			SUPPRESS_META = True
 		elif o == "-i":
 			FULL_DELAY = True
 		elif o == "-a":
 			INCLUDE_ALL_REPLIES = True
+		
+	if FULL_DELAY and not INCLUDE_EDGE_NUMBER:
+		usage()
+		exit(2)
 		
 	build_graph()
 

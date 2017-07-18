@@ -15,7 +15,7 @@ def usage():
 def caida_meta(dir_str, file_str):
 	#parse strs to get fields.
 	source="caida"
-	date=dir_str.split('/')[-1]
+	date=dir_str.rstrip('/').split('/')[-1]
 	time=file_str.split('.')[1]
 	monitor=file_str.split('.')[2]
 	team=file_str.split('.')[0]
