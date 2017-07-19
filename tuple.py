@@ -22,7 +22,7 @@ def enum(**enums):
 #	   -u use Unsorted output
 #          -b output both simpified and verbose file
 #          -n include edge number
-#          -m include monitor info
+#          -m include monitor
 #          -l include length of indirect edge \
 #             (number of non-reply hops)
 #          -r ignore meta header
@@ -192,6 +192,7 @@ def output(node_dict, edge_dict, header_line):
 	global UNSORTED_OUTPUT
 
 	global INCLUDE_EDGE_NUMBER
+	global INCLUDE_MONITOR
 	global INCLUDE_INDIRECT_LENGTH
 	global INCLUDE_TTL
 	global FULL_DELAY
@@ -228,9 +229,12 @@ def output(node_dict, edge_dict, header_line):
 	else:
 		file_name = "nosource" + format.fnd + "notime" + format.fnd + "nomonitor"
 	
-	#get monitor name
-	if INCLUDE_MONITOR:
-		monitor = header_line.split(format.hd)[format.Meta.monitor]
+	#get monitor.
+	if INCLUDE_MONITOR and header_line != "":
+		meta_list = header_line.split(format.hd)
+		monitor = meta_list[format.Meta.monitor]
+	elif INCLUDE_MONITOR:
+		monitor = "nomonitor"
 
 	#start to write node
 	if GZIP_OUTPUT:
@@ -257,8 +261,8 @@ def output(node_dict, edge_dict, header_line):
 		ip_str = format.ip_int2str(node_key)
 		node = node_dict[node_key]
 		ntype = node.ntype
-		
 		handle.write( str(ip_str) + format.tid + str(ntype) + "\n" )
+		
 	handle.close()
 	
 	#start to write edge
@@ -303,7 +307,10 @@ def output(node_dict, edge_dict, header_line):
 				length_str = length_str.rstrip(format.ed)
 				handle.write( format.tid + str(length_str) )
 		if INCLUDE_EDGE_NUMBER:
-			handle.write( format.tid + str(monitor) + format.ed + str(edge.number) )
+			if INCLUDE_MONITOR:
+				handle.write( format.tid + str(monitor) + format.ed + str(edge.number) )
+			else:
+				handle.write( format.tid + str(edge.number) )
 		if FULL_DELAY:
 			min_positive = edge.delay[2] if edge.delay[2] != edge.MAX_DELAY else 0
 			delay_str = str(edge.delay[0]) + format.ed + str(edge.delay[1]) + format.ed + str(min_positive) + format.ed + str(edge.delay[3])
@@ -315,13 +322,17 @@ def output(node_dict, edge_dict, header_line):
 			for key in sorted( ttl.iterkeys() ):
 				ttl_str += str(key) + format.ed + str(ttl[key]) + format.ed
 			ttl_str = ttl_str.rstrip(format.ed)
-			handle.write( format.tid + str(monitor) + format.ed + str(ttl_str) )
+			if INCLUDE_MONITOR:
+				handle.write( format.tid + str(monitor) + format.ed + format.ed + str(ttl_str) )
+			else:
+				handle.write( format.tid + str(ttl_str) )
 
 		handle.write("\n")
 	
 	#output verbose file
 	if OUTPUT_VERBOSE:
 		INCLUDE_EDGE_NUMBER = True
+		INCLUDE_MONITOR = True
 		INCLUDE_INDIRECT_LENGTH = True
 		INCLUDE_TTL = True
 		FULL_DELAY = True
@@ -367,7 +378,6 @@ def usage():
 	print "-u use Unsorted output"
 	print "-b output Both simplified and verbose file"
 	print "-n include edge Number"
-	print "-m include Monitor info"
 	print "-l include Length of indirect edge"
 	print "-r ignoRe meta header (concerned with output file name)"
 	print "-s Suppress Meta header (concerned with content in output file)"

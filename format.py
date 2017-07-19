@@ -134,7 +134,8 @@ EdgeLine = enum(
 
 NodeLine = enum(
 	ip=0, #essentially, an IP is a 32 int.
-	ntype=1
+	ntype=1, 
+	monitor=2
 )
 
 ConnectionState = enum(
