@@ -33,7 +33,7 @@ INPUT_FILETYPE = format.FileType.other
 GZIP_OUTPUT = False
 COMPRESSED = False
 DEL_ORG = False
-
+OUTPUT_FILENAME = ""
 
 GROUP_NUMBER_BY_MON = False
 GROUP_TTL_BY_MON = False
@@ -55,6 +55,8 @@ def edge_line_merge(line1,line2,th_line1):
 	global GROUP_NUMBER_BY_MON
 	global GROUP_TTL_BY_MON
 
+	line1=line1.strip("\n")
+	line2=line2.strip("\n")
 	ingress = line1.split(format.tid)[format.EdgeLine.ingress]
 	outgress = line1.split(format.tid)[format.EdgeLine.outgress]
 
@@ -253,6 +255,8 @@ def node_line_cmp(ln1, ln2):
 	return l1ip - l2ip
 
 def node_line_merge(line1,line2,th_line1):
+	line1=line1.strip("\n")
+	line2=line2.strip("\n")
 	ip = line1.split(format.tid)[format.NodeLine.ip]
 	ntype1 = line1.split(format.tid)[format.NodeLine.ntype]
 	ntype2 = line2.split(format.tid)[format.NodeLine.ntype]
@@ -290,7 +294,12 @@ def merge_two(infn1, infn2, ofn, compressed=False, gzip_output=False):
 	if compressed or re.compile(".*\.gz$").match(infn1):
 		h1 = subprocess.Popen(['gzip', '-c', '-d', '-'], stdin=handle1, stdout=subprocess.PIPE)
 		handle1 = h1.stdout
-
+	
+	#one file hack
+	if infn2 == "":
+		fpo.write(handle1.read())
+		return
+	
 	handle2 = open(infn2, 'r')
 	if compressed or re.compile(".*\.gz$").match(infn2):
 		h2 = subprocess.Popen(['gzip', '-c', '-d', '-'], stdin=handle2, stdout=subprocess.PIPE)
@@ -332,6 +341,9 @@ def merge_two(infn1, infn2, ofn, compressed=False, gzip_output=False):
 		print_debug( "File %s, %s has different format, refuse to merge" % (infn1, infn2) )
 		return
 
+	#th line
+	fpo.write(th_line1)
+
 	#merge
 	while (line1!='' and line2!=''):
 		cmp = line_cmp_func(line1,line2)
@@ -369,8 +381,8 @@ def remove(fn_list):
 # Function merge: Logic to merge files
 # Input:
 #    @inf_list: input file name list
-#    @ofn: output file name
-#    also, function uses 3 global variables:
+#    also, function uses 4 global variables:
+#       OUTPUT_FILENAME
 #       COMPRESSED, indicates whether ORIGINAL input files are compressed
 #       GZIP_OUTPUT, indicates whether the FINAL output file is compressed
 #       DEL_ORG, indicates whether to delete the ORIGINAL files
@@ -379,15 +391,16 @@ def remove(fn_list):
 # (And Let C,G,D be short for global flags)
 # Pseudo of merge: 
 #    1: if len(inf_list) == 1: simply return
-#    2: if len(inf_list) == 2: set 
+#    2: if len(inf_list) == 2: set c,g,d to C,G,D , merge these two
 #    3: Set c,g,d = C,F,D and call merge_multi
 # Pseudo of merge_multi:
 #    1: if len(ifn_list) == 2: set c,g,d to F,G,T. #End of recursive calls
 #    2: else:
-#    3:     set c,g,d = F,F,T, iterate through ifn_list, merge two by two
+#    3:     iterate through ifn_list, merge two by two
+#    4:     update ifn_list, set c,g,d = F,F,T, recursively calls merge_multi
 # 
 # (see the following table for simplified logic)
-# Truth Table:
+# Truth Table: rows represents recursive call rounds
 #     +---+---+---+
 #     | c | g | d |
 # +---+---+---+---+
@@ -403,27 +416,41 @@ def remove(fn_list):
 #############################################################################
 
 def merge_multi(ifn_list, compressed, gzip_output, del_org):
+	global OUTPUT_FILENAME
+
 	if len(ifn_list) == 2:
-		merge_two(ifn_list[0], ifn_list[1], compressed=False, gzip_output=GZIP_OUTPUT)
+		print_debug( "%s + %s ==> %s" % (ifn_list[0], ifn_list[1], OUTPUT_FILENAME) )
+		merge_two(ifn_list[0], ifn_list[1], OUTPUT_FILENAME, compressed=False, gzip_output=GZIP_OUTPUT)
 		remove(ifn_list)
 	else:
 		length = len(ifn_list)
 		new_ifn_list = []
 		for i in range(0,len(ifn_list)-1,2):
 			tmp_ofn = str(length) + "." + str(i)
+			print_debug( "%s + %s ==> %s" % (ifn_list[i], ifn_list[i+1], tmp_ofn) )
 			merge_two(ifn_list[i], ifn_list[i+1], tmp_ofn, compressed, gzip_output)
 			new_ifn_list.append(tmp_ofn)
-		merge_multi(new_ifn_list, compressed=False, gzip_output=False)
+		#odd
+		i = len(ifn_list) - 1
+		if (len(ifn_list) % 2) != 0:
+			tmp_ofn = str(length) + "." + str(i)
+			print_debug( "%s + %s ==> %s" % (ifn_list[i], "none", tmp_ofn) )
+			merge_two(ifn_list[i], "", tmp_ofn, compressed, gzip_output)
+			new_ifn_list.append(tmp_ofn)
+			
+		merge_multi(new_ifn_list, compressed=False, gzip_output=False, del_org=True)
 		if del_org:
 			remove(ifn_list)
 
-def merge(ifn_list, ofn):
+def merge(ifn_list):
+	global OUTPUT_FILENAME
+
 	if len(ifn_list) <= 1:
 		return #no need to merge
 	if len(ifn_list) == 2: #special case: if only two input files given.
-		merge_two(ifn_list[0], ifn_list[1], compressed, gzip_output)
-		if (del_org):
-			print_debug("REMOVE")
+		merge_two(ifn_list[0], ifn_list[1], OUTPUT_FILENAME, COMPRESSED, GZIP_OUTPUT)
+		if (DEL_ORG):
+			remove(ifn_list)
 	else:
 		merge_multi(ifn_list, compressed=COMPRESSED, gzip_output=False, del_org=DEL_ORG)
 	
@@ -453,12 +480,12 @@ def main(argv):
 	global DEBUG
 	#option flags
 	global INPUT_FILETYPE
+	global OUTPUT_FILENAME
 
 	global GROUP_NUMBER_BY_MON
 	global GROUP_TTL_BY_MON
 
 	ifn_list = []
-	ofn = ""
 	
 	try:
 		opts, args = getopt.getopt(argv[1:], "hgi:y:co:zntd")
@@ -480,7 +507,7 @@ def main(argv):
 		elif o == "-c":
 			COMPRESSED = True
 		elif o == "-o":
-			ofn = a
+			OUTPUT_FILENAME = a
 		elif o == "-z":
 			GZIP_OUTPUT = True
 		elif o == "-n":
@@ -498,10 +525,10 @@ def main(argv):
 				break
 			ifn_list.append(line.strip('\n'))
 
-	if (ofn == ""):
-		ofn = "default.output"
+	if (OUTPUT_FILENAME == ""):
+		OUTPUT_FILENAME = "default.output"
 	
-	merge(ifn_list, ofn)
+	merge(ifn_list)
 		
 if __name__ == "__main__":
 	main(sys.argv)
