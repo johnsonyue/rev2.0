@@ -1,4 +1,5 @@
 import sys
+import os
 import getopt
 import subprocess
 import re
@@ -10,7 +11,6 @@ import format
 #        SORTED tuple files with \
 #        SAME format, either node or edge, requires \
 #        TABLE HEADER in each file. \ 
-#        *META header line is not required but recommended
 # Input:
 #        by default, reads file name from stdin
 # Output: ONE merged tuple file
@@ -30,14 +30,13 @@ import format
 DEBUG = False
 #option flags
 INPUT_FILETYPE = format.FileType.other
-INPUT_FILE_COMPRESSED = False
-
-OUTPUT_FILENAME = ""
 GZIP_OUTPUT = False
+COMPRESSED = False
+DEL_ORG = False
+
 
 GROUP_NUMBER_BY_MON = False
 GROUP_TTL_BY_MON = False
-INCLUDE_MONITOR = False
 
 def edge_line_cmp(ln1, ln2):
 	l1in = format.ip_str2int(ln1.split(format.tid)[format.EdgeLine.ingress])
@@ -52,7 +51,7 @@ def edge_line_cmp(ln1, ln2):
 
 	return 0
 
-def edge_line_merge(line1,line2,header_line1,header_line2,th_line1):
+def edge_line_merge(line1,line2,th_line1):
 	global GROUP_NUMBER_BY_MON
 	global GROUP_TTL_BY_MON
 
@@ -77,41 +76,99 @@ def edge_line_merge(line1,line2,header_line1,header_line2,th_line1):
 	else:
 		connected = connected1
 	
-	th_list = th_line1.split(format.thd)
+	line = str(ingress) + format.tid + str(outgress) + format.tid + str(delay) + format.tid + str(connected)
+	
+	#optional fields
+	th_list = th_line1.strip("\n").split(format.thd)
 	if "length" in th_list:
 		length1 = line1.split(format.tid)[format.EdgeLine.length]
 		length2 = line2.split(format.tid)[format.EdgeLine.length]
-		length = length1 + [ l for l in length2 and not in length1 ]
+		length1_list = length1.split(format.ed)
+		length2_list = length2.split(format.ed)
+		length_list = length1_list + [ l for l in length2_list if not l in length1_list ]
+		length = ""
+		for l in length_list:
+			length += l + format.ed
+		
+		line += format.tid + str(length.strip(format.ed))
 
 	if "number" in th_list:
-		number1 = int(line1.split(format.tid)[format.EdgeLine.number])
-		number2 = int(line2.split(format.tid)[format.EdgeLine.number])
+		number1 = line1.split(format.tid)[format.EdgeLine.number]
+		number2 = line2.split(format.tid)[format.EdgeLine.number]
 		if not GROUP_NUMBER_BY_MON:
-			number = number1 + number2
+			number = int(number1) + int(number2)
+		
+			line += format.tid + str(number)
+		else:
+			number_list1 = number1.split(format.ed)
+			number_dict1 = {}
+			for i in range(0,len(number_list1),2):
+				mon = number_list1[i]
+				num = int(number_list1[i+1])
+				number_dict1[mon] = num
+
+			number_list2 = number2.split(format.ed)
+			number_dict2 = {}
+			for i in range(0,len(number_list2),2):
+				mon = number_list2[i]
+				num = int(number_list2[i+1])
+				number_dict2[mon] = num
+			
+			number_str = ""
+			for key in number_dict1.iterkeys():
+				if number_dict2.has_key(key):
+					number_str += str(key) + format.ed + str(number_dict1[key]+number_dict2[key]) + format.ed
+				else:
+					number_str += str(key) + format.ed +str(number_dict1[key]) + format.ed
+			for key in number_dict2.iterkeys():
+				if not number_dict1.has_key(key):
+					number_str += str(key) + format.ed + str(number_dict2[key]) + format.ed
+
+			line += format.tid + number_str.strip(format.ed)
 	
 	if "delay_info" in th_list:
-		delay_info1 = map(lambda x:int(x), line1.split(format.tid)[format.EdgeLine.delay_info].split(format.ed))
-		delay_info2 = map(lambda x:int(x) ,line2.split(format.tid)[format.EdgeLine.delay_info].split(format.ed))
+		delay_info1 = map(lambda x:float(x), line1.split(format.tid)[format.EdgeLine.delay_info].split(format.ed))
+		delay_info2 = map(lambda x:float(x) ,line2.split(format.tid)[format.EdgeLine.delay_info].split(format.ed))
 		max_delay = delay_info1[0] if delay_info1[0] > delay_info2[0] else delay_info2[0]
 		min_delay = delay_info1[3] if delay_info1[3] < delay_info2[3] else delay_info2[3]
-		mean_delay = float(number1*delay_info1[1] + number2*delay_info2[1]) / (number1 + number2)
+		if GROUP_NUMBER_BY_MON:
+			number_list1 = number1.split(format.ed)
+			number1 = 0
+			for i in range(0,len(number_list1),2):
+				num = int(number_list1[i+1])
+				number1 += num
+
+			number_list2 = number2.split(format.ed)
+			number2 = 0
+			for i in range(0,len(number_list2),2):
+				num = int(number_list2[i+1])
+				number2 += num
+			
+		mean_delay = (int(number1)*delay_info1[1] + int(number2)*delay_info2[1]) / (int(number1) + int(number2))
 		delay_info = [ max_delay, mean_delay, delay, min_delay ]
 
-	if "ttl_info" in th_list:
-		ttl_info_list1 = map(lambda x:int(x), line1.split(format.tid)[format.EdgeLine.ttl_info].split(format.ed).split(format.ed))
-		ttl_info1 = {}
-		for i in range(0,len(ttl_info_list1),2):
-			key = ttl_info_list1[i]
-			value = ttl_info_list1[i+1]
-			ttl_info1[key] = value
-		ttl_info_list2 = map(lambda x:int(x), line2.split(format.tid)[format.EdgeLine.ttl_info].split(format.ed).split(format.ed))
-		for i in range(0,len(ttl_info_list2),2):
-			key = ttl_info_list2[i]
-			value = ttl_info_list2[i+1]
-			ttl_info2[key] = value
+		delay_info_str = ""
+		for d in delay_info:
+			delay_info_str += str(d) + format.ed
+		line += format.tid + str(delay_info_str.strip(format.ed))
 
-		ttl_info = {}
+	if "ttl_info" in th_list:
 		if not GROUP_TTL_BY_MON:
+			ttl_info_list1 = map(lambda x:int(x), line1.split(format.tid)[format.EdgeLine.ttl_info].split(format.ed))
+			ttl_info1 = {}
+			for i in range(0,len(ttl_info_list1),2):
+				key = ttl_info_list1[i]
+				value = ttl_info_list1[i+1]
+				ttl_info1[key] = value
+
+			ttl_info_list2 = map(lambda x:int(x), line2.split(format.tid)[format.EdgeLine.ttl_info].split(format.ed))
+			ttl_info2 = {}
+			for i in range(0,len(ttl_info_list2),2):
+				key = ttl_info_list2[i]
+				value = ttl_info_list2[i+1]
+				ttl_info2[key] = value
+
+			ttl_info = {}
 			for key in ttl_info1.iterkeys():
 				if not ttl_info2.has_key(key):
 					ttl_info[key] = ttl_info1[key]
@@ -120,15 +177,82 @@ def edge_line_merge(line1,line2,header_line1,header_line2,th_line1):
 			for key in ttl_info2.iterkeys():
 				if not ttl_info1.has_key(key):
 					ttl_info[key] = ttl_info2[key]
+		
+			ttl_info_str = ""
+			for key in ttl_info.iterkeys():
+				value = ttl_info[key]
+				ttl_info_str += str(key) + format.ed + str(value) + format.ed
+
+			line += format.tid + ttl_info_str.strip(format.ed)
+		else:
+			ttl_info_list1 = line1.split(format.tid)[format.EdgeLine.ttl_info].split(format.ed+format.ed)
+			ttl_info_dict1 = {}
+			for i in range(0,len(ttl_info_list1),2):
+				mon = ttl_info_list1[i]
+				mon_ttl_list = map( lambda x:int(x), ttl_info_list1[i+1].split(format.ed) )
+				mon_ttl_dict = {}
+				for i in range(0,len(mon_ttl_list),2):
+					key = mon_ttl_list[i]
+					value = mon_ttl_list[i+1]
+					mon_ttl_dict[key] = value
+				ttl_info_dict1[mon] = mon_ttl_dict
+
+			ttl_info_list2 = line2.split(format.tid)[format.EdgeLine.ttl_info].split(format.ed+format.ed)
+			ttl_info_dict2 = {}
+			for i in range(0,len(ttl_info_list2),2):
+				mon = ttl_info_list2[i]
+				mon_ttl_list = map( lambda x:int(x), ttl_info_list2[i+1].split(format.ed) )
+				mon_ttl_dict = {}
+				for i in range(0,len(mon_ttl_list),2):
+					key = mon_ttl_list[i]
+					value = mon_ttl_list[i+1]
+					mon_ttl_dict[key] = value
+				ttl_info_dict2[mon] = mon_ttl_dict
 			
+			ttl_info_str = ""
+			for key in ttl_info_dict1.iterkeys():
+				if ttl_info_dict2.has_key(key):
+					mon_ttl_dict1 = ttl_info_dict1[key]
+					mon_ttl_dict2 = ttl_info_dict2[key]
+					mon_ttl_dict = {}
+					for k in mon_ttl_dict1.iterkeys():
+						if mon_ttl_dict2.has_key(k):
+							mon_ttl_dict[k] = mon_ttl_dict1[k] + mon_ttl_dict2[k]
+						else:
+							mon_ttl_dict[k] = mon_ttl_dict1[k]
+					for k in mon_ttl_dict2.iterkeys():
+						if not mon_ttl_dict1.has_key(k):
+							mon_ttl_dict[k] = mon_ttl_dict2[k]
+				else:
+					mon_ttl_dict = ttl_info_dict1[key]
+				
+				mon_ttl_str = ""
+				for k in mon_ttl_dict:
+					mon_ttl_str += str(k) + format.ed + str(mon_ttl_dict[k]) + format.ed
+				mon_ttl_str = mon_ttl_str.strip(format.ed)
+
+				ttl_info_str += str(key) + format.ed + format.ed + str(mon_ttl_str) + format.ed + format.ed
+
+			for key in ttl_info_dict2.iterkeys():
+				if not ttl_info_dict1.has_key(key):
+					mon_ttl_dict = ttl_info_dict2[key]
+					mon_ttl_str = ""
+					for k in mon_ttl_dict:
+						mon_ttl_str += str(k) + format.ed + str(mon_ttl_dict[k]) + format.ed
+					mon_ttl_str = mon_ttl_str.strip(format.ed)
+					
+					ttl_info_str += str(key) + format.ed + format.ed + str(mon_ttl_str) + format.ed + format.ed
+
+			line += format.tid + ttl_info_str.strip(format.ed+format.ed)
+	
+	return str(line) + "\n"
+		
 def node_line_cmp(ln1, ln2):
 	l1ip = format.ip_str2int(ln1.split(format.tid)[format.NodeLine.ip])
 	l2ip = format.ip_str2int(ln2.split(format.tid)[format.NodeLine.ip])
 	return l1ip - l2ip
 
-def node_line_merge(line1,line2,header_line1,header_line2,th_line1):
-	global INCLUDE_MONITOR
-
+def node_line_merge(line1,line2,th_line1):
 	ip = line1.split(format.tid)[format.NodeLine.ip]
 	ntype1 = line1.split(format.tid)[format.NodeLine.ntype]
 	ntype2 = line2.split(format.tid)[format.NodeLine.ntype]
@@ -138,13 +262,12 @@ def node_line_merge(line1,line2,header_line1,header_line2,th_line1):
 	else:
 		ntype = ntype1
 	
-	return
+	return str(ip) + format.tid + str(ntype) + "\n"
 
-def merge_two(infn1, infn2, ofn, compressed=False):
+def merge_two(infn1, infn2, ofn, compressed=False, gzip_output=False):
 	global DEBUG
 	#option flags
 	global INPUT_FILETYPE
-	global GZIP_OUTPUT
 
 	global GROUP_NUMBER_BY_MON
 	global GROUP_TTL_BY_MON
@@ -152,29 +275,29 @@ def merge_two(infn1, infn2, ofn, compressed=False):
 	if INPUT_FILETYPE == format.FileType.node:
 		line_cmp_func = node_line_cmp
 		line_merge_func = node_line_merge
-	elif INPUT_FILETYPE == format.FileType.edge:
+	else:
 		line_cmp_func = edge_line_cmp
+		line_merge_func = edge_line_merge
 	
 	#open handles to write
 	fpo = open(ofn, 'w')
-	if GZIP_OUTPUT:
+	if gzip_output:
 		ho = subprocess.Popen(['gzip', '-c', '-'], stdin=subprocess.PIPE, stdout=fpo)
 		fpo = ho.stdin
 
 	#open handles to read
 	handle1 = open(infn1, 'r')
-	if compressed or re.compile(".*\.tar\.gz$").match(infn1):
+	if compressed or re.compile(".*\.gz$").match(infn1):
 		h1 = subprocess.Popen(['gzip', '-c', '-d', '-'], stdin=handle1, stdout=subprocess.PIPE)
 		handle1 = h1.stdout
 
 	handle2 = open(infn2, 'r')
-	if compressed or re.compile(".*\.tar\.gz$").match(:
+	if compressed or re.compile(".*\.gz$").match(infn2):
 		h2 = subprocess.Popen(['gzip', '-c', '-d', '-'], stdin=handle2, stdout=subprocess.PIPE)
 		handle2 = h2.stdout
 
 	#headers
 	th_line1 = ""
-	header_line1 = ""
 	first_line1=handle1.readline()
 	if first_line1.split(format.thd)[0] != format.thi:
 		if first_line1.split(format.thd)[0] == (format.thi + format.thi):
@@ -187,12 +310,10 @@ def merge_two(infn1, infn2, ofn, compressed=False):
 		if second_line1.split(format.hd)[0] != format.hi:
 			line1 = second_line1
 		else:
-			header_line1 = second_line1
 			line1 = handle1.readline()
 	
 	
 	th_line2 = ""
-	header_line2 = ""
 	first_line2=handle2.readline()
 	if first_line2.split(format.thd)[0] != format.thi:
 		if first_line2.split(format.thd)[0] == (format.thi + format.thi):
@@ -205,7 +326,6 @@ def merge_two(infn1, infn2, ofn, compressed=False):
 		if second_line2.split(format.hd)[0] != format.hi:
 			line2 = second_line2
 		else:
-			header_line2 = second_line2
 			line2 = handle2.readline()
 
 	if th_line1 != th_line2:
@@ -222,7 +342,7 @@ def merge_two(infn1, infn2, ofn, compressed=False):
 			fpo.write(line2)
 			line2=handle2.readline()
 		else:
-			line=line_merge_func(line1,line2,header_line1,header_line2,th_line1)
+			line=line_merge_func(line1,line2,th_line1)
 			fpo.write(line)
 				
 			line1=handle1.readline()
@@ -241,18 +361,83 @@ def merge_two(infn1, infn2, ofn, compressed=False):
 	handle2.close()
 	fpo.close()
 
+def remove(fn_list):
+	for fn in fn_list:
+		os.remove(fn)
+
+#############################################################################
+# Function merge: Logic to merge files
+# Input:
+#    @inf_list: input file name list
+#    @ofn: output file name
+#    also, function uses 3 global variables:
+#       COMPRESSED, indicates whether ORIGINAL input files are compressed
+#       GZIP_OUTPUT, indicates whether the FINAL output file is compressed
+#       DEL_ORG, indicates whether to delete the ORIGINAL files
+#
+# (Let c,g,d be short for local variables in current scope)
+# (And Let C,G,D be short for global flags)
+# Pseudo of merge: 
+#    1: if len(inf_list) == 1: simply return
+#    2: if len(inf_list) == 2: set 
+#    3: Set c,g,d = C,F,D and call merge_multi
+# Pseudo of merge_multi:
+#    1: if len(ifn_list) == 2: set c,g,d to F,G,T. #End of recursive calls
+#    2: else:
+#    3:     set c,g,d = F,F,T, iterate through ifn_list, merge two by two
+# 
+# (see the following table for simplified logic)
+# Truth Table:
+#     +---+---+---+
+#     | c | g | d |
+# +---+---+---+---+
+# | 1.| C | F | D |
+# +---+---+---+---+
+# | 2.| F | F | T |
+# +---+---+---+---+
+# |...| F | F | T |
+# +---+---+---+---+
+# | n.| F | G | T |
+# +---+---+---+---+
+#
+#############################################################################
+
+def merge_multi(ifn_list, compressed, gzip_output, del_org):
+	if len(ifn_list) == 2:
+		merge_two(ifn_list[0], ifn_list[1], compressed=False, gzip_output=GZIP_OUTPUT)
+		remove(ifn_list)
+	else:
+		length = len(ifn_list)
+		new_ifn_list = []
+		for i in range(0,len(ifn_list)-1,2):
+			tmp_ofn = str(length) + "." + str(i)
+			merge_two(ifn_list[i], ifn_list[i+1], tmp_ofn, compressed, gzip_output)
+			new_ifn_list.append(tmp_ofn)
+		merge_multi(new_ifn_list, compressed=False, gzip_output=False)
+		if del_org:
+			remove(ifn_list)
+
+def merge(ifn_list, ofn):
+	if len(ifn_list) <= 1:
+		return #no need to merge
+	if len(ifn_list) == 2: #special case: if only two input files given.
+		merge_two(ifn_list[0], ifn_list[1], compressed, gzip_output)
+		if (del_org):
+			print_debug("REMOVE")
+	else:
+		merge_multi(ifn_list, compressed=COMPRESSED, gzip_output=False, del_org=DEL_ORG)
+	
 def print_debug(msg):
 	if (DEBUG):
 		sys.stderr.write("%s\n" % (msg))
 def usage():
 	print "merge [OPTIONS] [-]"
 	print "INPUT:"
-	print " by default, reads file name from stdin"
+	print "    by default, reads file name from stdin"
 	print "REQUIREMENT:"
-	print " SORTED tuple files with \\"
-	print " SAME format, either node or edge, requires \\"
-	print " TABLE HEADER in each file. \\" 
-	print " *META header line is not required but recommended"
+	print "    SORTED tuple files with "
+	print "    SAME format, either node or edge, requires "
+	print "    TABLE HEADER in each file. " 
 	print "OPTIONS:"
 	print "-h print this Help"
 	print "-i input filename(s)"
@@ -260,27 +445,23 @@ def usage():
 	print "-c input file compressed"
 	print "-o output filename"
 	print "-z compress output file"
-	print "-m include monitor"
 	print "-n group number by monitor"
 	print "-t group ttl by monitor"
+	print "-d delete input files"
 
 def main(argv):
 	global DEBUG
 	#option flags
 	global INPUT_FILETYPE
-	global INPUT_FILE_COMPRESSED
-
-	global OUTPUT_FILENAME
-	global GZIP_OUTPUT
 
 	global GROUP_NUMBER_BY_MON
 	global GROUP_TTL_BY_MON
-	global INCLUDE_MONITOR
 
 	ifn_list = []
+	ofn = ""
 	
 	try:
-		opts, args = getopt.getopt(argv[1:], "hgi:y:co:znt")
+		opts, args = getopt.getopt(argv[1:], "hgi:y:co:zntd")
 	except getopt.GetoptError as err:
 		print str(err)
 		usage()
@@ -297,17 +478,17 @@ def main(argv):
 		elif o == "-y":
 			INPUT_FILETYPE = a
 		elif o == "-c":
-			INPUT_FILE_COMPRESSED = a
+			COMPRESSED = True
 		elif o == "-o":
-			OUTPUT_FILENAME = a
+			ofn = a
 		elif o == "-z":
 			GZIP_OUTPUT = True
-		elif o == "-m":
-			INCLUDE_MONITOR = True
 		elif o == "-n":
 			GROUP_NUMBER_BY_MON = True
 		elif o == "-t":
 			GROUP_TTL_BY_MON = True
+		elif o == "-t":
+			DEL_ORG = True
 	
 	if (len(ifn_list) == 0):
 		while True:
@@ -317,10 +498,10 @@ def main(argv):
 				break
 			ifn_list.append(line.strip('\n'))
 
-	if (OUTPUT_FILENAME == ""):
-		OUTPUT_FILENAME = "default.output"
+	if (ofn == ""):
+		ofn = "default.output"
 	
-	#merge()
+	merge(ifn_list, ofn)
 		
 if __name__ == "__main__":
 	main(sys.argv)
