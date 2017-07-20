@@ -284,6 +284,8 @@ def merge_two(infn1, infn2, ofn, compressed=False, gzip_output=False):
 		line_merge_func = edge_line_merge
 	
 	#open handles to write
+	if gzip_output:
+		fpo += ".gz"
 	fpo = open(ofn, 'w')
 	if gzip_output:
 		ho = subprocess.Popen(['gzip', '-c', '-'], stdin=subprocess.PIPE, stdout=fpo)
