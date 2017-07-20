@@ -1,0 +1,74 @@
+#! /bin/bash 
+
+###################################################
+#params:
+#  @FILE_PATH: path of the file to be decoded
+#  @TYPE: different type of data source requires \
+#         different decoding mechanism
+#  @META: (optional) wether to print meta data \
+#         contained in dirname and filename
+###################################################
+
+usage(){
+	echo "decode [OPTIONS] <FILE_PATH>"
+	echo "OPTIONS:"
+	echo "-t caida/iplane/ripeatlas/hit"
+	echo "-m"
+}
+
+[ $# -eq 0 ] && usage && exit
+
+#parse cmd line args.
+OPTIND=1
+while getopts "hmt:" opt; do
+	case "$opt" in
+		h)
+			usage
+			exit ;;
+		m)
+			META="True" ;;
+		t)
+			TYPE=$OPTARG ;;
+		*)
+			usage
+			exit -1;;
+	esac
+done
+
+shift $((OPTIND-1))
+file_path=$1
+
+#type and file_path is mandatory
+[ -z "$TYPE" ] && usage && exit
+[ -z "$file_path" ] && usage && exit
+
+#print meta if requested.
+file_str=$( echo $file_path | sed 's/^.*\///g' )
+if [ "$META" == "True" ]; then
+	[ ! "${file_path}" == "/" ] && file_path=$pwd/$file_path
+	dir_str=$( echo $file_path | sed 's/[^\/]*$//g' )
+	python meta.py $TYPE $dir_str $file_str
+fi
+
+#decode file according to type
+case $TYPE in
+	"caida")
+		if [ ! -z "$( echo $file_str | grep "\.tar\.gz$" )" ]; then
+			[ ! -z "$( echo $file_str | grep "warts")" ] &&  tar zxvf $file_path -O | sc_analysis_dump && exit
+			tar zxvf $file_path -O && exit
+		elif [ ! -z "$( echo $file_str | grep "gz$" )" ]; then
+			[ ! -z "$( echo $file_str | grep "warts")" ] &&  gzip -cd $file_path | sc_analysis_dump && exit
+			gzip -cd $file_path && exit
+			
+		else
+			[ ! -z "$( echo $file_str | grep "warts")" ] && cat $file_path | sc_analysis_dump && exit
+			cat $file_path && exit
+		fi
+		;;
+	"iplane")
+		echo "iplane"
+		;;
+	*)
+		usage
+		exit -1;;
+esac
