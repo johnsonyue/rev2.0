@@ -37,6 +37,8 @@ out_dir=$2
 
 ls -d $in_dir/* | grep "20*" | sort -nr | while read line; do
 	date=$(echo $line | sed "s/\/$//g" | sed "s/^.*\///g")
+	test -d $out_dir/$date/ && echo "$out_dir/$date/ already exists" && continue
+	echo "mkdir -p $out_dir/$date"
 	mkdir -p $out_dir/$date
 	echo "> $line ==(preprocess)==> $out_dir/$date/"
 	pre_caida_date $line $out_dir/$date/
