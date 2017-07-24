@@ -22,13 +22,13 @@ def enum(**enums):
 #	   -u use Unsorted output
 #          -b output both simpified and verbose file
 #          -n include edge number
-#          -m include monitor
 #          -l include length of indirect edge \
 #             (number of non-reply hops)
 #          -r ignore meta header
 #          -s suppress Meta header
 #          -i include full delay info
 #          -a include all replied IPs in one hop (only use first reply by default)
+#          -m include monitor (by default not enabled in backup)
 #
 # Note: final graph does not contain src ip
 ##############################################################################################
@@ -332,7 +332,6 @@ def output(node_dict, edge_dict, header_line):
 	#output verbose file
 	if OUTPUT_VERBOSE:
 		INCLUDE_EDGE_NUMBER = True
-		INCLUDE_MONITOR = True
 		INCLUDE_INDIRECT_LENGTH = True
 		INCLUDE_TTL = True
 		FULL_DELAY = True
@@ -378,6 +377,7 @@ def usage():
 	print "-u use Unsorted output"
 	print "-b output Both simplified and verbose file"
 	print "-n include edge Number"
+	print "-m include monitor"
 	print "-l include Length of indirect edge"
 	print "-r ignoRe meta header (concerned with output file name)"
 	print "-s Suppress Meta header (concerned with content in output file)"
@@ -409,7 +409,7 @@ def main(argv):
 	global SUPPRESS_META
 
 	try:
-		opts, args = getopt.getopt(argv[1:], "hgo:d:zubnmltrsia")
+		opts, args = getopt.getopt(argv[1:], "hgo:d:zubnltrsiam")
 	except getopt.GetoptError as err:
 		print str(err)
 		usage()
@@ -433,8 +433,6 @@ def main(argv):
 			OUTPUT_VERBOSE = True
 		elif o == "-n":
 			INCLUDE_EDGE_NUMBER = True
-		elif o == "-m":
-			INCLUDE_MONITOR = True
 		elif o == "-l":
 			INCLUDE_INDIRECT_LENGTH = True
 		elif o == "-t":
@@ -447,6 +445,8 @@ def main(argv):
 			FULL_DELAY = True
 		elif o == "-a":
 			INCLUDE_ALL_REPLIES = True
+		elif o == "-m":
+			INCLUDE_MONITOR = True
 		
 	if FULL_DELAY and not INCLUDE_EDGE_NUMBER:
 		usage()

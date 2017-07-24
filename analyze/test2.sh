@@ -7,7 +7,7 @@ pre_caida_date(){
 	ls $input_dir/caida* | while read line; do
 		fn=$(echo $line | sed "s/^.*\///g")
 		echo ">> $line ==(parse)==> $output_dir/$fn"
-		./decode -t caida -m $line | python uniform.py caida | python tuple.py -b -g -o $fn -d $output_dir
+		./decode -t caida -m $line | python uniform.py caida | python tuple.py -m -b -g -o $fn -d $output_dir
 	done
 }
 
