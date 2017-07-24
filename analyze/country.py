@@ -91,6 +91,10 @@ def usage():
 	print "OPTIONS:"
 	print "-h print this Help"
 	print "-l <bgp/czdb/mmdb/ip2location> specify geoip database"
+	print "-z gzip output"
+	print "-o <filename> overwrite output file name,"
+	print "-r ignore meta header"
+	print "-s supress meta header"
 
 def main(argv):
 	global DEBUG

@@ -23,6 +23,7 @@ import format
 #          "-z compress output file"
 #          "-n group number by monitor"
 #          "-t group ttl by monitor"
+#          "-p temporary file dicrectory"
 #
 # Note: final graph does not contain src ip
 ##############################################################################################
@@ -34,6 +35,7 @@ GZIP_OUTPUT = False
 COMPRESSED = False
 DEL_ORG = False
 OUTPUT_FILENAME = ""
+TMP_DIR = ""
 
 GROUP_NUMBER_BY_MON = False
 GROUP_TTL_BY_MON = False
@@ -419,6 +421,7 @@ def remove(fn_list):
 
 def merge_multi(ifn_list, compressed, gzip_output, del_org):
 	global OUTPUT_FILENAME
+	global TMP_DIR
 
 	if len(ifn_list) == 2:
 		print_debug( "%s + %s ==> %s" % (ifn_list[0], ifn_list[1], OUTPUT_FILENAME) )
@@ -429,6 +432,8 @@ def merge_multi(ifn_list, compressed, gzip_output, del_org):
 		new_ifn_list = []
 		for i in range(0,len(ifn_list)-1,2):
 			tmp_ofn = str(length) + "." + str(i)
+			if TMP_DIR != "":
+				tmp_ofn = str(TMP_DIR) + "/" + str(tmp_ofn)
 			print_debug( "%s + %s ==> %s" % (ifn_list[i], ifn_list[i+1], tmp_ofn) )
 			merge_two(ifn_list[i], ifn_list[i+1], tmp_ofn, compressed, gzip_output)
 			new_ifn_list.append(tmp_ofn)
@@ -436,6 +441,8 @@ def merge_multi(ifn_list, compressed, gzip_output, del_org):
 		i = len(ifn_list) - 1
 		if (len(ifn_list) % 2) != 0:
 			tmp_ofn = str(length) + "." + str(i)
+			if TMP_DIR != "":
+				tmp_ofn = str(TMP_DIR) + "/" + str(tmp_ofn)
 			print_debug( "%s + %s ==> %s" % (ifn_list[i], "none", tmp_ofn) )
 			merge_two(ifn_list[i], "", tmp_ofn, compressed, gzip_output)
 			new_ifn_list.append(tmp_ofn)
@@ -477,12 +484,14 @@ def usage():
 	print "-n group number by monitor"
 	print "-t group ttl by monitor"
 	print "-d delete input files"
+	print "-p tmp file directory"
 
 def main(argv):
 	global DEBUG
 	#option flags
 	global INPUT_FILETYPE
 	global OUTPUT_FILENAME
+	global TMP_DIR
 
 	global GROUP_NUMBER_BY_MON
 	global GROUP_TTL_BY_MON
@@ -490,7 +499,7 @@ def main(argv):
 	ifn_list = []
 	
 	try:
-		opts, args = getopt.getopt(argv[1:], "hgi:y:co:zntd")
+		opts, args = getopt.getopt(argv[1:], "hgi:y:co:zntdp:")
 	except getopt.GetoptError as err:
 		print str(err)
 		usage()
@@ -518,6 +527,8 @@ def main(argv):
 			GROUP_TTL_BY_MON = True
 		elif o == "-t":
 			DEL_ORG = True
+		elif o == "-p":
+			TMP_DIR = a
 	
 	if (len(ifn_list) == 0):
 		while True:
