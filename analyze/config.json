@@ -1,0 +1,8 @@
+{
+	"db":{
+		"address":"172.17.0.2",
+		"port":"7687",
+		"username":"neo4j",
+		"password":"1q2w3e4r"
+	}
+}
