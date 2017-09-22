@@ -1,0 +1,36 @@
+#!/bin/bash
+
+usage(){
+	echo "insert -d <\$directory>"
+}
+
+dir=""
+#parse cmd line args.
+while getopts "hd:" opt; do
+	case "$opt" in
+		h)
+			usage
+			exit ;;
+		d)
+			dir=$OPTARG ;;
+		*)
+			usage
+			exit -1;;
+	esac
+done
+
+[ -z "$dir" ] && usage && exit
+
+import_dir="/var/lib/neo4j/import/"
+temp_file_name=$import_dir"/org.csv"
+ls $dir/* | grep "edge" | grep -v "merged" | grep -v "backup" | while read line; do
+	echo $line
+	csv_file_name=$(echo $line | sed 's/^.*\///g')
+	csv_file_name=$import_dir"/"$csv_file_name".csv"
+	echo $csv_file_name
+	cp $line $temp_file_name
+	head -n 1 $temp_file_name | sed 's/#,//g' | sed 's/ //g' > $csv_file_name
+	tail -n +3 $temp_file_name | sed 's/ //g' >> $csv_file_name
+	python import.py -f $csv_file_name
+	break
+done

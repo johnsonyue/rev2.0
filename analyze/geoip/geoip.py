@@ -6,6 +6,7 @@ import os
 
 class geoip_helper():
 	def __init__(self,source_list=["mmdb"]):
+		self.source_list = source_list
 		self.lookup = None
 		self.qqwry= None
 		self.reader= None
@@ -35,13 +36,13 @@ class geoip_helper():
 		mmdb = ""
 		czdb = ""
 		ip2location = ""
-		if self.lookup != None:
+		if self.lookup != None and "lookup" in self.source_list:
 			bgp = self.query_from_bgp(ip)
-		if self.reader != None:
+		if self.reader != None and "mmdb" in self.source_list:
 			mmdb = self.query_from_mmdb(ip)
-		if self.qqwry != None:
+		if self.qqwry != None and "czdb" in self.source_list:
 			czdb = self.query_from_czdb(ip)
-		if self.database != None:
+		if self.database != None and "ip2location" in self.source_list:
 			ip2location = self.query_from_czdb(ip)
 		return {"bgp":bgp, "mmdb":mmdb, "czdb":czdb, "ip2location":ip2location}
 	
@@ -84,3 +85,8 @@ class geoip_helper():
 		except:
 				return {"country":"*", "city":"*", "latitude":"*", "longitude":"*"}
 			
+	def query_asn_from_bgp(self, ip):
+		if (self.lookup == None):
+			self.lookup = lookup.lookup()
+		asn = self.lookup.get_asn_from_pfx(ip)
+		return {"asn":asn}
